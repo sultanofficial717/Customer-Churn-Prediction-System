@@ -1,0 +1,32 @@
+# Python & virtual environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment & secrets
+.env
+*.pem
+*.key
+
+# Raw archives & local raw/processed data files
+*.zip
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Local vector stores (for optional RAG layer)
+chroma_db/
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

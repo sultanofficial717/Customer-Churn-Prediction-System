@@ -1,0 +1,212 @@
+{
+  "explainer_type": "TreeExplainer",
+  "evaluated_rows": 1409,
+  "base_value_log_odds": 0.0089,
+  "top_global_features": [
+    {
+      "feature": "Contract_Month-to-month",
+      "display_name": "Contract: Month-to-month",
+      "mean_abs_shap": 0.5297,
+      "mean_signed_shap": -0.1141
+    },
+    {
+      "feature": "tenure",
+      "display_name": "Tenure (months)",
+      "mean_abs_shap": 0.4239,
+      "mean_signed_shap": -0.1132
+    },
+    {
+      "feature": "InternetService_Fiber optic",
+      "display_name": "InternetService: Fiber optic",
+      "mean_abs_shap": 0.2541,
+      "mean_signed_shap": -0.0507
+    },
+    {
+      "feature": "OnlineSecurity_No",
+      "display_name": "OnlineSecurity: No",
+      "mean_abs_shap": 0.2505,
+      "mean_signed_shap": -0.0515
+    },
+    {
+      "feature": "Contract_Two year",
+      "display_name": "Contract: Two year",
+      "mean_abs_shap": 0.1938,
+      "mean_signed_shap": -0.05
+    },
+    {
+      "feature": "TechSupport_No",
+      "display_name": "TechSupport: No",
+      "mean_abs_shap": 0.1648,
+      "mean_signed_shap": -0.0415
+    },
+    {
+      "feature": "PaymentMethod_Electronic check",
+      "display_name": "PaymentMethod: Electronic check",
+      "mean_abs_shap": 0.1614,
+      "mean_signed_shap": -0.032
+    },
+    {
+      "feature": "avg_monthly_spend",
+      "display_name": "Avg Monthly Spend ($)",
+      "mean_abs_shap": 0.1352,
+      "mean_signed_shap": -0.0365
+    },
+    {
+      "feature": "MonthlyCharges",
+      "display_name": "Monthly Charges ($)",
+      "mean_abs_shap": 0.1151,
+      "mean_signed_shap": -0.0287
+    },
+    {
+      "feature": "TotalCharges",
+      "display_name": "Total Charges ($)",
+      "mean_abs_shap": 0.0892,
+      "mean_signed_shap": -0.0146
+    },
+    {
+      "feature": "PaperlessBilling_No",
+      "display_name": "PaperlessBilling: No",
+      "mean_abs_shap": 0.0826,
+      "mean_signed_shap": -0.0131
+    },
+    {
+      "feature": "MultipleLines_No",
+      "display_name": "MultipleLines: No",
+      "mean_abs_shap": 0.0788,
+      "mean_signed_shap": -0.0075
+    },
+    {
+      "feature": "StreamingMovies_Yes",
+      "display_name": "StreamingMovies: Yes",
+      "mean_abs_shap": 0.0721,
+      "mean_signed_shap": -0.0113
+    },
+    {
+      "feature": "OnlineBackup_No",
+      "display_name": "OnlineBackup: No",
+      "mean_abs_shap": 0.07,
+      "mean_signed_shap": -0.0115
+    },
+    {
+      "feature": "charge_ratio",
+      "display_name": "Monthly-to-Avg Charge Ratio",
+      "mean_abs_shap": 0.0631,
+      "mean_signed_shap": -0.008
+    }
+  ],
+  "sample_high_risk_customer": {
+    "predicted_probability": 0.9594,
+    "actual_churn": 1,
+    "profile": {
+      "gender": "Male",
+      "SeniorCitizen": 1,
+      "Partner": "Yes",
+      "Dependents": "No",
+      "tenure": 1,
+      "PhoneService": "Yes",
+      "MultipleLines": "Yes",
+      "InternetService": "Fiber optic",
+      "OnlineSecurity": "No",
+      "OnlineBackup": "No",
+      "DeviceProtection": "No",
+      "TechSupport": "No",
+      "StreamingTV": "Yes",
+      "StreamingMovies": "Yes",
+      "Contract": "Month-to-month",
+      "PaperlessBilling": "Yes",
+      "PaymentMethod": "Electronic check",
+      "MonthlyCharges": 95.1,
+      "TotalCharges": 95.1
+    },
+    "explanation": {
+      "explainer_type": "TreeExplainer",
+      "base_value_log_odds": 0.0089,
+      "top_drivers": [
+        {
+          "feature": "tenure",
+          "display_name": "Tenure (months)",
+          "transformed_value": 1.0,
+          "shap_value": 0.8418,
+          "abs_shap": 0.8418,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "Contract_Month-to-month",
+          "display_name": "Contract: Month-to-month",
+          "transformed_value": 1.0,
+          "shap_value": 0.381,
+          "abs_shap": 0.381,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "InternetService_Fiber optic",
+          "display_name": "InternetService: Fiber optic",
+          "transformed_value": 1.0,
+          "shap_value": 0.2276,
+          "abs_shap": 0.2276,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "OnlineSecurity_No",
+          "display_name": "OnlineSecurity: No",
+          "transformed_value": 1.0,
+          "shap_value": 0.204,
+          "abs_shap": 0.204,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "avg_monthly_spend",
+          "display_name": "Avg Monthly Spend ($)",
+          "transformed_value": 95.1,
+          "shap_value": 0.1893,
+          "abs_shap": 0.1893,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "display_name": "Total Charges ($)",
+          "transformed_value": 95.1,
+          "shap_value": 0.1815,
+          "abs_shap": 0.1815,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "PaymentMethod_Electronic check",
+          "display_name": "PaymentMethod: Electronic check",
+          "transformed_value": 1.0,
+          "shap_value": 0.1765,
+          "abs_shap": 0.1765,
+          "direction": "increases_churn_risk"
+        },
+        {
+          "feature": "TechSupport_No",
+          "display_name": "TechSupport: No",
+          "transformed_value": 1.0,
+          "shap_value": 0.1441,
+          "abs_shap": 0.1441,
+          "direction": "increases_churn_risk"
+        }
+      ],
+      "top_risk_increasing_factors": [
+        "Tenure (months)",
+        "Contract: Month-to-month",
+        "InternetService: Fiber optic"
+      ],
+      "top_risk_decreasing_factors": [],
+      "retention_considerations": [
+        "Month-to-month contract is a primary risk driver: consider evaluating a targeted 1-year or 2-year contract migration incentive (e.g., loyalty discount or waived upgrade fee).",
+        "Early-tenure lifecycle risk: prioritize proactive onboarding check-ins and first-year service satisfaction outreach before the initial renewal friction window.",
+        "Fiber optic service shows elevated churn association: audit line quality/speed tickets and review pricing competitiveness against comparable plans.",
+        "Missing Tech Support / Online Security add-ons increased predicted risk: test bundling a complimentary trial of technical support or security protection.",
+        "Electronic check payment is associated with higher churn: consider offering a small billing credit for enrolling in automatic bank transfer or credit-card autopay."
+      ],
+      "causality_disclaimer": "SHAP values explain how features contributed to this model's predicted log-odds; they represent statistical associations learned from historical data, not proven causation."
+    }
+  },
+  "generated_figures": [
+    "14_shap_summary_beeswarm.png",
+    "15_shap_feature_importance_bar.png",
+    "16_shap_dependence_top_features.png",
+    "17_shap_local_high_risk_example.png"
+  ]
+}
