@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import plotly.express as px
@@ -14,19 +15,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import EDA_SUMMARY_PATH, PROCESSED_DATA_PATH, RAW_DATA_PATH, TARGET_COL
+from src.config import EDA_SUMMARY_PATH, FIGURES_DIR, PROCESSED_DATA_PATH, RAW_DATA_PATH, TARGET_COL
 from src.data_processing import clean_data, load_raw_data
 
 st.set_page_config(page_title="Overview Dashboard | Churn System", page_icon="📊", layout="wide")
 
 
 @st.cache_data
-def load_dashboard_data() -> pd.DataFrame:
+def load_dashboard_data() -> Optional[pd.DataFrame]:
     if PROCESSED_DATA_PATH.exists():
         return pd.read_csv(PROCESSED_DATA_PATH)
     if RAW_DATA_PATH.exists():
         return clean_data(load_raw_data(), include_target=True)
-    raise FileNotFoundError("Dataset not found. Place raw CSV in data/raw/ or run src.data_processing.")
+    return None
 
 
 @st.cache_data
@@ -43,175 +44,275 @@ st.caption("Explore observed churn patterns across contracts, tenure, billing, p
 df = load_dashboard_data()
 eda_summary = load_eda_summary()
 
-# Sidebar interactive filters
-st.sidebar.header("Filter Customer Cohort")
-contract_filter = st.sidebar.multiselect(
-    "Contract Type",
-    options=sorted(df["Contract"].unique().tolist()),
-    default=sorted(df["Contract"].unique().tolist()),
-)
-internet_filter = st.sidebar.multiselect(
-    "Internet Service",
-    options=sorted(df["InternetService"].unique().tolist()),
-    default=sorted(df["InternetService"].unique().tolist()),
-)
-payment_filter = st.sidebar.multiselect(
-    "Payment Method",
-    options=sorted(df["PaymentMethod"].unique().tolist()),
-    default=sorted(df["PaymentMethod"].unique().tolist()),
-)
+if df is not None:
+    # Full row-level interactive mode (local or when CSV is available)
+    st.sidebar.header("Filter Customer Cohort")
+    contract_filter = st.sidebar.multiselect(
+        "Contract Type",
+        options=sorted(df["Contract"].unique().tolist()),
+        default=sorted(df["Contract"].unique().tolist()),
+    )
+    internet_filter = st.sidebar.multiselect(
+        "Internet Service",
+        options=sorted(df["InternetService"].unique().tolist()),
+        default=sorted(df["InternetService"].unique().tolist()),
+    )
+    payment_filter = st.sidebar.multiselect(
+        "Payment Method",
+        options=sorted(df["PaymentMethod"].unique().tolist()),
+        default=sorted(df["PaymentMethod"].unique().tolist()),
+    )
 
-filtered = df[
-    df["Contract"].isin(contract_filter)
-    & df["InternetService"].isin(internet_filter)
-    & df["PaymentMethod"].isin(payment_filter)
-].copy()
+    filtered = df[
+        df["Contract"].isin(contract_filter)
+        & df["InternetService"].isin(internet_filter)
+        & df["PaymentMethod"].isin(payment_filter)
+    ].copy()
 
-if filtered.empty:
-    st.warning("No customers match the current filter selection. Adjust sidebar filters.")
+    if filtered.empty:
+        st.warning("No customers match the current filter selection. Adjust sidebar filters.")
+        st.stop()
+
+    filtered["ChurnLabel"] = filtered[TARGET_COL].map({0: "Retained", 1: "Churned"})
+
+    total_n = len(filtered)
+    churned_n = int(filtered[TARGET_COL].sum())
+    churn_rate = filtered[TARGET_COL].mean()
+    avg_monthly = filtered["MonthlyCharges"].mean()
+    churned_mrr = filtered.loc[filtered[TARGET_COL] == 1, "MonthlyCharges"].sum()
+    total_mrr = filtered["MonthlyCharges"].sum()
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Customers in Selection", f"{total_n:,}")
+    k2.metric("Churn Rate", f"{churn_rate:.2%}", f"{churned_n:,} churned")
+    k3.metric("Avg Monthly Charges", f"${avg_monthly:.2f}")
+    k4.metric(
+        "Churned Monthly Billing",
+        f"${churned_mrr:,.0f}",
+        f"{(churned_mrr / total_mrr):.1%} of filtered billing" if total_mrr > 0 else None,
+    )
+
+    st.divider()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        dist_df = filtered["ChurnLabel"].value_counts().reset_index()
+        dist_df.columns = ["Status", "Customers"]
+        fig_dist = px.pie(
+            dist_df,
+            names="Status",
+            values="Customers",
+            hole=0.45,
+            color="Status",
+            color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
+            title="Overall Churn vs. Retention Split",
+        )
+        st.plotly_chart(fig_dist, use_container_width=True)
+
+    with c2:
+        contract_stats = (
+            filtered.groupby("Contract")[TARGET_COL]
+            .agg(churn_rate="mean", customers="count")
+            .reset_index()
+            .sort_values("churn_rate", ascending=False)
+        )
+        contract_stats["churn_pct"] = contract_stats["churn_rate"] * 100
+        fig_contract = px.bar(
+            contract_stats,
+            x="Contract",
+            y="churn_pct",
+            text=contract_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
+            color="churn_pct",
+            color_continuous_scale="Reds",
+            title="Churn Rate by Contract Type (%)",
+            labels={"churn_pct": "Churn Rate (%)"},
+        )
+        fig_contract.update_traces(textposition="outside")
+        fig_contract.update_layout(
+            showlegend=False,
+            coloraxis_showscale=False,
+            yaxis_range=[0, max(55, contract_stats["churn_pct"].max() + 10)],
+        )
+        st.plotly_chart(fig_contract, use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        fig_tenure = px.histogram(
+            filtered,
+            x="tenure",
+            color="ChurnLabel",
+            nbins=24,
+            barmode="overlay",
+            opacity=0.65,
+            color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
+            title="Customer Tenure Distribution by Churn Status",
+            labels={"tenure": "Tenure (Months)"},
+        )
+        st.plotly_chart(fig_tenure, use_container_width=True)
+
+    with c4:
+        fig_charges = px.box(
+            filtered,
+            x="ChurnLabel",
+            y="MonthlyCharges",
+            color="ChurnLabel",
+            color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
+            title="Monthly Charges Spread: Churned vs. Retained",
+            labels={"MonthlyCharges": "Monthly Charges ($)", "ChurnLabel": ""},
+        )
+        st.plotly_chart(fig_charges, use_container_width=True)
+
+    c5, c6 = st.columns(2)
+    with c5:
+        pay_stats = (
+            filtered.groupby("PaymentMethod")[TARGET_COL]
+            .agg(churn_rate="mean", customers="count")
+            .reset_index()
+            .sort_values("churn_rate", ascending=True)
+        )
+        pay_stats["churn_pct"] = pay_stats["churn_rate"] * 100
+        fig_pay = px.bar(
+            pay_stats,
+            y="PaymentMethod",
+            x="churn_pct",
+            orientation="h",
+            text=pay_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
+            color="churn_pct",
+            color_continuous_scale="OrRd",
+            title="Churn Rate by Payment Method (%)",
+            labels={"churn_pct": "Churn Rate (%)", "PaymentMethod": ""},
+        )
+        fig_pay.update_traces(textposition="outside")
+        fig_pay.update_layout(
+            coloraxis_showscale=False,
+            xaxis_range=[0, max(58, pay_stats["churn_pct"].max() + 15)],
+        )
+        st.plotly_chart(fig_pay, use_container_width=True)
+
+    with c6:
+        inet_stats = (
+            filtered.groupby("InternetService")[TARGET_COL]
+            .agg(churn_rate="mean", customers="count")
+            .reset_index()
+            .sort_values("churn_rate", ascending=False)
+        )
+        inet_stats["churn_pct"] = inet_stats["churn_rate"] * 100
+        fig_inet = px.bar(
+            inet_stats,
+            x="InternetService",
+            y="churn_pct",
+            text=inet_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
+            color="churn_pct",
+            color_continuous_scale="Reds",
+            title="Churn Rate by Internet Service (%)",
+            labels={"churn_pct": "Churn Rate (%)"},
+        )
+        fig_inet.update_traces(textposition="outside")
+        fig_inet.update_layout(
+            coloraxis_showscale=False,
+            yaxis_range=[0, max(55, inet_stats["churn_pct"].max() + 12)],
+        )
+        st.plotly_chart(fig_inet, use_container_width=True)
+
+elif eda_summary:
+    # Cloud-safe fallback mode using committed measured EDA artifacts (no raw CSV required)
+    st.info(
+        "Running in **Cloud Artifact Mode** using precomputed measured EDA summaries (`eda_summary.json`). "
+        "Add the raw Telco CSV locally in `data/raw/` to enable row-level sidebar filtering."
+    )
+    td = eda_summary["target_distribution"]
+    bm = eda_summary["measured_billing_metrics"]
+    seg = eda_summary["segment_analysis"]
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total Customers", f"{td['total_customers']:,}")
+    k2.metric("Overall Churn Rate", f"{td['churn_rate']:.2%}", f"{td['churned_customers']:,} churned")
+    k3.metric("Avg Monthly Charges", f"${bm['avg_monthly_charge_all']:.2f}")
+    k4.metric(
+        "Churned Monthly Billing",
+        f"${bm['churned_monthly_charges_sum']:,.0f}",
+        f"{bm['churned_monthly_charges_share']:.1%} of total billing",
+    )
+
+    st.divider()
+
+    def _seg_bar(seg_key: str, title: str, orientation: str = "v"):
+        sdf = pd.DataFrame(seg[seg_key])
+        sdf["churn_pct"] = sdf["churn_rate"] * 100
+        label_txt = sdf.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1)
+        if orientation == "h":
+            sdf = sdf.sort_values("churn_pct", ascending=True)
+            fig = px.bar(
+                sdf,
+                y="segment",
+                x="churn_pct",
+                orientation="h",
+                text=label_txt,
+                color="churn_pct",
+                color_continuous_scale="OrRd",
+                title=title,
+                labels={"churn_pct": "Churn Rate (%)", "segment": ""},
+            )
+            fig.update_layout(coloraxis_showscale=False, xaxis_range=[0, max(58, sdf["churn_pct"].max() + 15)])
+        else:
+            fig = px.bar(
+                sdf,
+                x="segment",
+                y="churn_pct",
+                text=label_txt,
+                color="churn_pct",
+                color_continuous_scale="Reds",
+                title=title,
+                labels={"churn_pct": "Churn Rate (%)", "segment": ""},
+            )
+            fig.update_layout(coloraxis_showscale=False, yaxis_range=[0, max(55, sdf["churn_pct"].max() + 12)])
+        fig.update_traces(textposition="outside")
+        return fig
+
+    c1, c2 = st.columns(2)
+    with c1:
+        dist_df = pd.DataFrame(
+            {
+                "Status": ["Retained", "Churned"],
+                "Customers": [td["retained_customers"], td["churned_customers"]],
+            }
+        )
+        fig_dist = px.pie(
+            dist_df,
+            names="Status",
+            values="Customers",
+            hole=0.45,
+            color="Status",
+            color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
+            title="Overall Churn vs. Retention Split",
+        )
+        st.plotly_chart(fig_dist, use_container_width=True)
+    with c2:
+        st.plotly_chart(_seg_bar("Contract", "Churn Rate by Contract Type (%)"), use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.plotly_chart(_seg_bar("tenure_bucket", "Churn Rate by Tenure Cohort (%)"), use_container_width=True)
+    with c4:
+        st.plotly_chart(_seg_bar("monthly_charge_band", "Churn Rate by Monthly Charge Band (%)"), use_container_width=True)
+
+    c5, c6 = st.columns(2)
+    with c5:
+        st.plotly_chart(_seg_bar("PaymentMethod", "Churn Rate by Payment Method (%)", orientation="h"), use_container_width=True)
+    with c6:
+        st.plotly_chart(_seg_bar("InternetService", "Churn Rate by Internet Service (%)"), use_container_width=True)
+
+    p_tenure = FIGURES_DIR / "03_churn_by_tenure.png"
+    p_charges = FIGURES_DIR / "04_churn_by_monthly_charges.png"
+    if p_tenure.exists() and p_charges.exists():
+        f1, f2 = st.columns(2)
+        f1.image(str(p_tenure), caption="Tenure Distribution by Churn Status", use_container_width=True)
+        f2.image(str(p_charges), caption="Monthly Charges Density & Spread", use_container_width=True)
+else:
+    st.error("Neither the Telco CSV nor `reports/evaluation/eda_summary.json` was found.")
     st.stop()
 
-filtered["ChurnLabel"] = filtered[TARGET_COL].map({0: "Retained", 1: "Churned"})
-filtered["TenureCohort"] = pd.cut(
-    filtered["tenure"],
-    bins=[-1, 12, 24, 48, 72],
-    labels=["0-12m", "13-24m", "25-48m", "49-72m"],
-).astype(str)
-
-# KPI Row
-total_n = len(filtered)
-churned_n = int(filtered[TARGET_COL].sum())
-churn_rate = filtered[TARGET_COL].mean()
-avg_monthly = filtered["MonthlyCharges"].mean()
-churned_mrr = filtered.loc[filtered[TARGET_COL] == 1, "MonthlyCharges"].sum()
-total_mrr = filtered["MonthlyCharges"].sum()
-
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Customers in Selection", f"{total_n:,}")
-k2.metric("Churn Rate", f"{churn_rate:.2%}", f"{churned_n:,} churned")
-k3.metric("Avg Monthly Charges", f"${avg_monthly:.2f}")
-k4.metric(
-    "Churned Monthly Billing",
-    f"${churned_mrr:,.0f}",
-    f"{(churned_mrr / total_mrr):.1%} of filtered billing" if total_mrr > 0 else None,
-)
-
-st.divider()
-
-# Row 1: Overall Churn Distribution & Contract Type
-c1, c2 = st.columns(2)
-with c1:
-    dist_df = filtered["ChurnLabel"].value_counts().reset_index()
-    dist_df.columns = ["Status", "Customers"]
-    fig_dist = px.pie(
-        dist_df,
-        names="Status",
-        values="Customers",
-        hole=0.45,
-        color="Status",
-        color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
-        title="Overall Churn vs. Retention Split",
-    )
-    st.plotly_chart(fig_dist, use_container_width=True)
-
-with c2:
-    contract_stats = (
-        filtered.groupby("Contract")[TARGET_COL]
-        .agg(churn_rate="mean", customers="count")
-        .reset_index()
-        .sort_values("churn_rate", ascending=False)
-    )
-    contract_stats["churn_pct"] = contract_stats["churn_rate"] * 100
-    fig_contract = px.bar(
-        contract_stats,
-        x="Contract",
-        y="churn_pct",
-        text=contract_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
-        color="churn_pct",
-        color_continuous_scale="Reds",
-        title="Churn Rate by Contract Type (%)",
-        labels={"churn_pct": "Churn Rate (%)"},
-    )
-    fig_contract.update_traces(textposition="outside")
-    fig_contract.update_layout(showlegend=False, coloraxis_showscale=False, yaxis_range=[0, max(55, contract_stats["churn_pct"].max() + 10)])
-    st.plotly_chart(fig_contract, use_container_width=True)
-
-# Row 2: Tenure & Monthly Charges
-c3, c4 = st.columns(2)
-with c3:
-    fig_tenure = px.histogram(
-        filtered,
-        x="tenure",
-        color="ChurnLabel",
-        nbins=24,
-        barmode="overlay",
-        opacity=0.65,
-        color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
-        title="Customer Tenure Distribution by Churn Status",
-        labels={"tenure": "Tenure (Months)"},
-    )
-    st.plotly_chart(fig_tenure, use_container_width=True)
-
-with c4:
-    fig_charges = px.box(
-        filtered,
-        x="ChurnLabel",
-        y="MonthlyCharges",
-        color="ChurnLabel",
-        color_discrete_map={"Retained": "#2E86AB", "Churned": "#E05A47"},
-        title="Monthly Charges Spread: Churned vs. Retained",
-        labels={"MonthlyCharges": "Monthly Charges ($)", "ChurnLabel": ""},
-    )
-    st.plotly_chart(fig_charges, use_container_width=True)
-
-# Row 3: Payment Method & Internet Service
-c5, c6 = st.columns(2)
-with c5:
-    pay_stats = (
-        filtered.groupby("PaymentMethod")[TARGET_COL]
-        .agg(churn_rate="mean", customers="count")
-        .reset_index()
-        .sort_values("churn_rate", ascending=True)
-    )
-    pay_stats["churn_pct"] = pay_stats["churn_rate"] * 100
-    fig_pay = px.bar(
-        pay_stats,
-        y="PaymentMethod",
-        x="churn_pct",
-        orientation="h",
-        text=pay_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
-        color="churn_pct",
-        color_continuous_scale="OrRd",
-        title="Churn Rate by Payment Method (%)",
-        labels={"churn_pct": "Churn Rate (%)", "PaymentMethod": ""},
-    )
-    fig_pay.update_traces(textposition="outside")
-    fig_pay.update_layout(coloraxis_showscale=False, xaxis_range=[0, max(58, pay_stats["churn_pct"].max() + 15)])
-    st.plotly_chart(fig_pay, use_container_width=True)
-
-with c6:
-    inet_stats = (
-        filtered.groupby("InternetService")[TARGET_COL]
-        .agg(churn_rate="mean", customers="count")
-        .reset_index()
-        .sort_values("churn_rate", ascending=False)
-    )
-    inet_stats["churn_pct"] = inet_stats["churn_rate"] * 100
-    fig_inet = px.bar(
-        inet_stats,
-        x="InternetService",
-        y="churn_pct",
-        text=inet_stats.apply(lambda r: f"{r['churn_pct']:.1f}% (n={r['customers']:,})", axis=1),
-        color="churn_pct",
-        color_continuous_scale="Reds",
-        title="Churn Rate by Internet Service (%)",
-        labels={"churn_pct": "Churn Rate (%)"},
-    )
-    fig_inet.update_traces(textposition="outside")
-    fig_inet.update_layout(coloraxis_showscale=False, yaxis_range=[0, max(55, inet_stats["churn_pct"].max() + 12)])
-    st.plotly_chart(fig_inet, use_container_width=True)
-
-# Row 4: Key Business Insights (Strictly Measured vs Assumptions)
+# Measured Business Insights & Retention Implications
 st.divider()
 st.subheader("💡 Measured Business Insights & Retention Implications")
 
